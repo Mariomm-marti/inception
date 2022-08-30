@@ -64,6 +64,67 @@ services:
         uid: "33"
         gid: "33"
         mode: 0440
+  wordpress:
+    build:
+      context: ./wordpress
+      dockerfile: wordpress.Dockerfile
+      <<: *service_metadata
+    # Work in progress
+    # ----------------------------------------
+    command: "-F"
+    configs:
+      - source: nginx_config
+        target: /etc/nginx/nginx.conf
+        uid: "33"
+        gid: "33"
+        mode: 0440
+    container_name: nginx
+      #depends_on:
+      #  db:
+      #    condition: service_healthy
+      #  wordpress:
+      #    condition: service_healthy
+    deploy:
+      endpoint_mode: dnsrr
+      <<: *service_metadata
+      mode: global # replicated
+      # replicas: 3
+      restart_policy:
+        condition: on-failure
+        delay: 1s
+        max_attempts: 5
+        window: 4s
+    entrypoint: /usr/sbin/nginx
+    env_file:
+      - ./.env
+    healthcheck:
+      test: ["CMD", "/usr/bin/curl", "-f", "https://localhost"]
+      interval: 5s
+      timeout: 2s
+      retries: 3
+      start_period: 5s
+    hostname: nginx
+    <<: *service_metadata
+    networks:
+      - front_tier
+      - back_tier
+    ports:
+      - target: 443
+        published: "${NGINX_PORT:?nginx external port is missing in .env}"
+        host_ip: 127.0.0.1
+        protocol: tcp
+        mode: host # ingress Allows to add replicas on deploy
+    secrets:
+      - source: nginx_ssl_key
+        target: nginx.key
+        uid: "33"
+        gid: "33"
+        mode: 0440
+      - source: nginx_ssl_crt
+        target: nginx.crt
+        uid: "33"
+        gid: "33"
+        mode: 0440
 
         # This belongs on the wordpress + php fastCGI server
         #    expose:
@@ -72,6 +133,7 @@ services:
           # volumes:
           #   - type: volume
           #     source: ./nginx/
+    # ----------------------------------------
 
 networks:
   front_tier:
