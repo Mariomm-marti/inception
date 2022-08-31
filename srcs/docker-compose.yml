@@ -18,16 +18,15 @@ services:
         gid: "33"
         mode: 0440
     container_name: nginx
-      #depends_on:
-      #  db:
-      #    condition: service_healthy
-      #  wordpress:
-      #    condition: service_healthy
+    depends_on:
+      db:
+        condition: service_healthy
+      wordpress:
+        codndition: service_healthy
     deploy:
       endpoint_mode: dnsrr
       <<: *service_metadata
-      mode: global # replicated
-      # replicas: 3
+      mode: global
       restart_policy:
         condition: on-failure
         delay: 1s
@@ -52,7 +51,7 @@ services:
         published: "${NGINX_PORT:?nginx external port is missing in .env}"
         host_ip: 127.0.0.1
         protocol: tcp
-        mode: host # ingress Allows to add replicas on deploy
+        mode: host
     secrets:
       - source: nginx_ssl_key
         target: nginx.key
@@ -64,86 +63,135 @@ services:
         uid: "33"
         gid: "33"
         mode: 0440
-  wordpress:
+        # TODO Add volume wordpress
+#  wordpress:
+#    build:
+#      context: ./wordpress
+#      dockerfile: wordpress.Dockerfile
+#      <<: *service_metadata
+#    # Work in progress
+#    # ----------------------------------------
+#    command: "-F"
+#    configs:
+#      - source: nginx_config
+#        target: /etc/nginx/nginx.conf
+#        uid: "33"
+#        gid: "33"
+#        mode: 0440
+#    container_name: nginx
+#      #depends_on:
+#      #  db:
+#      #    condition: service_healthy
+#      #  wordpress:
+#      #    condition: service_healthy
+#    deploy:
+#      endpoint_mode: dnsrr
+#      <<: *service_metadata
+#      mode: global # replicated
+#      # replicas: 3
+#      restart_policy:
+#        condition: on-failure
+#        delay: 1s
+#        max_attempts: 5
+#        window: 4s
+#    entrypoint: /usr/sbin/nginx
+#    env_file:
+#      - ./.env
+#    healthcheck:
+#      test: ["CMD", "/usr/bin/curl", "-f", "https://localhost"]
+#      interval: 5s
+#      timeout: 2s
+#      retries: 3
+#      start_period: 5s
+#    hostname: nginx
+#    <<: *service_metadata
+#    networks:
+#      - front_tier
+#      - back_tier
+#    ports:
+#      - target: 443
+#        published: "${NGINX_PORT:?nginx external port is missing in .env}"
+#        host_ip: 127.0.0.1
+#        protocol: tcp
+#        mode: host # ingress Allows to add replicas on deploy
+#    secrets:
+#      - source: nginx_ssl_key
+#        target: nginx.key
+#        uid: "33"
+#        gid: "33"
+#        mode: 0440
+#      - source: nginx_ssl_crt
+#        target: nginx.crt
+#        uid: "33"
+#        gid: "33"
+#        mode: 0440
+#
+#        # This belongs on the wordpress + php fastCGI server
+#        #    expose:
+#        #      - "9000"
+#          # For wordpress and db
+#          # volumes:
+#          #   - type: volume
+#          #     source: ./nginx/
+#    # ----------------------------------------
+  db:
     build:
-      context: ./wordpress
-      dockerfile: wordpress.Dockerfile
+      context: ./db
+      dockerfile: db.Dockerfile
+      # Args is used instead of direct ENV on Dockerfile to avoid empty configs
+      args:
+        DB_ROOT_PASS: "${DB_ROOT_PASS:?db root pass missing .env}"
+        DB_WORDPRESS_USER: "${DB_WORDPRESS_USER:?db wp user undefined in .env}"
+        DB_WORDPRESS_PASS: "${DB_WORDPRESS_PASS:?db wp pass undefined in .env}"
+        DB_WORDPRESS_NAME: "${DB_WORDPRESS_NAME:?db wp db name undefined in .env}"
       <<: *service_metadata
-    # Work in progress
-    # ----------------------------------------
-    command: "-F"
-    configs:
-      - source: nginx_config
-        target: /etc/nginx/nginx.conf
-        uid: "33"
-        gid: "33"
-        mode: 0440
-    container_name: nginx
-      #depends_on:
-      #  db:
-      #    condition: service_healthy
-      #  wordpress:
-      #    condition: service_healthy
+    command: |
+      --basedir=/usr
+      --datadir=/var/lib/mysql
+      --plugin-dir=/usr/lib/aarch64-linux-gnu/mariadb19/plugin
+      --user=mysql
+      --skip-log-error
+      --pid-file=/run/mysqld/mysqld.pid
+      --socket=/var/run/mysqld/mysqld.sock
+      --bind-address=0.0.0.0
+    container_name: db
     deploy:
       endpoint_mode: dnsrr
       <<: *service_metadata
-      mode: global # replicated
-      # replicas: 3
+      mode: global
       restart_policy:
         condition: on-failure
         delay: 1s
         max_attempts: 5
         window: 4s
-    entrypoint: /usr/sbin/nginx
-    env_file:
-      - ./.env
+    entrypoint: /usr/bin/mysqld_safe
+    expose:
+      - "3306"
     healthcheck:
-      test: ["CMD", "/usr/bin/curl", "-f", "https://localhost"]
+      test: ["CMD", "/usr/bin/mysqladmin", "ping", "-h", "localhost"]
       interval: 5s
       timeout: 2s
       retries: 3
       start_period: 5s
-    hostname: nginx
+    hostname: db
     <<: *service_metadata
     networks:
-      - front_tier
       - back_tier
-    ports:
-      - target: 443
-        published: "${NGINX_PORT:?nginx external port is missing in .env}"
-        host_ip: 127.0.0.1
-        protocol: tcp
-        mode: host # ingress Allows to add replicas on deploy
-    secrets:
-      - source: nginx_ssl_key
-        target: nginx.key
-        uid: "33"
-        gid: "33"
-        mode: 0440
-      - source: nginx_ssl_crt
-        target: nginx.crt
-        uid: "33"
-        gid: "33"
-        mode: 0440
-
-        # This belongs on the wordpress + php fastCGI server
-        #    expose:
-        #      - "9000"
-          # For wordpress and db
-          # volumes:
-          #   - type: volume
-          #     source: ./nginx/
-    # ----------------------------------------
+    volumes:
+      - type: volume
+        source: db
+        target: /var/lib/mysql
 
 networks:
   front_tier:
   back_tier:
 
-volumes: {}
+volumes:
+  db:
 
 configs:
   nginx_config:
-    file: "./nginx/nginx.conf"
+    file: ./nginx/nginx.conf
 
 secrets:
   nginx_ssl_key:
