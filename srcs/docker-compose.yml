@@ -63,77 +63,62 @@ services:
         uid: "33"
         gid: "33"
         mode: 0440
-        # TODO Add volume wordpress
-#  wordpress:
-#    build:
-#      context: ./wordpress
-#      dockerfile: wordpress.Dockerfile
-#      <<: *service_metadata
-#    # Work in progress
-#    # ----------------------------------------
-#    command: "-F"
-#    configs:
-#      - source: nginx_config
-#        target: /etc/nginx/nginx.conf
-#        uid: "33"
-#        gid: "33"
-#        mode: 0440
-#    container_name: nginx
-#      #depends_on:
-#      #  db:
-#      #    condition: service_healthy
-#      #  wordpress:
-#      #    condition: service_healthy
-#    deploy:
-#      endpoint_mode: dnsrr
-#      <<: *service_metadata
-#      mode: global # replicated
-#      # replicas: 3
-#      restart_policy:
-#        condition: on-failure
-#        delay: 1s
-#        max_attempts: 5
-#        window: 4s
-#    entrypoint: /usr/sbin/nginx
-#    env_file:
-#      - ./.env
-#    healthcheck:
-#      test: ["CMD", "/usr/bin/curl", "-f", "https://localhost"]
-#      interval: 5s
-#      timeout: 2s
-#      retries: 3
-#      start_period: 5s
-#    hostname: nginx
-#    <<: *service_metadata
-#    networks:
-#      - front_tier
-#      - back_tier
-#    ports:
-#      - target: 443
-#        published: "${NGINX_PORT:?nginx external port is missing in .env}"
-#        host_ip: 127.0.0.1
-#        protocol: tcp
-#        mode: host # ingress Allows to add replicas on deploy
-#    secrets:
-#      - source: nginx_ssl_key
-#        target: nginx.key
-#        uid: "33"
-#        gid: "33"
-#        mode: 0440
-#      - source: nginx_ssl_crt
-#        target: nginx.crt
-#        uid: "33"
-#        gid: "33"
-#        mode: 0440
-#
-#        # This belongs on the wordpress + php fastCGI server
-#        #    expose:
-#        #      - "9000"
-#          # For wordpress and db
-#          # volumes:
-#          #   - type: volume
-#          #     source: ./nginx/
-#    # ----------------------------------------
+    volumes:
+      - type: bind
+        source: /Users/mariomartinmoreno/data/wordpress
+        target: /var/www/mmartin.42.fr
+        bind:
+          create_host_path:
+  wordpress:
+    build:
+      context: ./wordpress
+      dockerfile: wordpress.Dockerfile
+      <<: *service_metadata
+    command: -F -c /etc/php/7.4/fpm/php.ini
+    configs:
+      - source: wordpress_php_config
+        target: /etc/php/7.4/fpm/php.ini
+        uid: "33"
+        gid: "33"
+        mode: 0440
+      - source: wordpress_www_config
+        target: /etc/php/7.4/fpm/pool.d/www.config
+        uid: "33"
+        gid: "33"
+        mode: 0440
+    container_name: wordpress
+    depends_on:
+      db:
+        condition: service_healthy
+    deploy:
+      endpoint_mode: dnsrr
+      <<: *service_metadata
+      mode: global
+      restart_policy:
+        condition: on-failure
+        delay: 1s
+        max_attempts: 5
+        window: 4s
+    entrypoint: "/usr/sbin/php-fpm7.4"
+    expose:
+      - "9000"
+    healthcheck:
+      test: ["CMD", "/bin/nc", "-zv", "localhost", "9000"]
+      interval: 5s
+      timeout: 2s
+      retries: 3
+      start_period: 5s
+    hostname: wordpress
+    <<: *service_metadata
+    networks:
+      - back_tier
+    volumes:
+      - type: bind
+        source: /Users/mariomartinmoreno/data/wordpress
+        target: /var/www/
+        read_only:
+        bind:
+          create_host_path:
   db:
     build:
       context: ./db
@@ -178,20 +163,27 @@ services:
     networks:
       - back_tier
     volumes:
-      - type: volume
-        source: db
+      - type: bind
+        source: /Users/mariomartinmoreno/data/db
         target: /var/lib/mysql
+        bind:
+          create_host_path:
 
 networks:
   front_tier:
   back_tier:
 
 volumes:
-  db:
+  /Users/mariomartinmoreno/data/db:
+  /Users/mariomartinmoreno/data/wordpress:
 
 configs:
   nginx_config:
     file: ./nginx/nginx.conf
+  wordpress_php_config:
+    file: ./wordpress/php.ini
+  wordpress_www_config:
+    file: ./wordpress/www.conf
 
 secrets:
   nginx_ssl_key:
