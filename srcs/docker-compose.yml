@@ -19,10 +19,7 @@ services:
         mode: 0440
     container_name: nginx
     depends_on:
-      db:
-        condition: service_healthy
-      wordpress:
-        codndition: service_healthy
+      - wordpress
     deploy:
       endpoint_mode: dnsrr
       <<: *service_metadata
@@ -36,7 +33,7 @@ services:
     env_file:
       - ./.env
     healthcheck:
-      test: ["CMD", "/usr/bin/curl", "-f", "https://localhost"]
+      test: ["CMD", "/bin/nc", "-zv", "localhost", "443"]
       interval: 5s
       timeout: 2s
       retries: 3
@@ -45,7 +42,6 @@ services:
     <<: *service_metadata
     networks:
       - front_tier
-      - back_tier
     ports:
       - target: 443
         published: "${NGINX_PORT:?nginx external port is missing in .env}"
@@ -64,17 +60,24 @@ services:
         gid: "33"
         mode: 0440
     volumes:
-      - type: bind
-        source: /Users/mariomartinmoreno/data/wordpress
-        target: /var/www/mmartin.42.fr
-        bind:
-          create_host_path:
+      - wordpress:/var/www/mmartin.42.fr
   wordpress:
     build:
       context: ./wordpress
       dockerfile: wordpress.Dockerfile
+      # Args is used instead of direct ENV on Dockerfile to avoid empty configs
+      args:
+        DB_WORDPRESS_USER: "${DB_WORDPRESS_USER:?db wp user undefined in .env}"
+        DB_WORDPRESS_PASS: "${DB_WORDPRESS_PASS:?db wp pass undefined in .env}"
+        DB_WORDPRESS_NAME: "${DB_WORDPRESS_NAME:?db wp db name undefined in .env}"
+        WP_ADMIN_NAME: "${WP_ADMIN_NAME:?wp admin name missing in .env}"
+        WP_ADMIN_PASS: "${WP_ADMIN_PASS:?wp admin pass missing in .env}"
+        WP_ADMIN_MAIL: "${WP_ADMIN_MAIL:?wp admin mail missing in .env}"
+        WP_USER_NAME: "${WP_USER_NAME:?wp user name missing in .env}"
+        WP_USER_PASS: "${WP_USER_PASS:?wp user pass missing in .env}"
+        WP_USER_MAIL: "${WP_USER_MAIL:?wp user mail missing in .env}"
       <<: *service_metadata
-    command: -F -c /etc/php/7.4/fpm/php.ini
+    command: "/start.sh"
     configs:
       - source: wordpress_php_config
         target: /etc/php/7.4/fpm/php.ini
@@ -82,14 +85,13 @@ services:
         gid: "33"
         mode: 0440
       - source: wordpress_www_config
-        target: /etc/php/7.4/fpm/pool.d/www.config
+        target: /etc/php/7.4/fpm/pool.d/www.conf
         uid: "33"
         gid: "33"
         mode: 0440
     container_name: wordpress
     depends_on:
-      db:
-        condition: service_healthy
+      - db
     deploy:
       endpoint_mode: dnsrr
       <<: *service_metadata
@@ -99,7 +101,9 @@ services:
         delay: 1s
         max_attempts: 5
         window: 4s
-    entrypoint: "/usr/sbin/php-fpm7.4"
+    entrypoint: "/bin/bash"
+    env_file:
+      - ./.env
     expose:
       - "9000"
     healthcheck:
@@ -111,14 +115,10 @@ services:
     hostname: wordpress
     <<: *service_metadata
     networks:
+      - front_tier
       - back_tier
     volumes:
-      - type: bind
-        source: /Users/mariomartinmoreno/data/wordpress
-        target: /var/www/
-        read_only:
-        bind:
-          create_host_path:
+      - wordpress:/var/www/mmartin.42.fr
   db:
     build:
       context: ./db
@@ -135,7 +135,6 @@ services:
       --datadir=/var/lib/mysql
       --plugin-dir=/usr/lib/aarch64-linux-gnu/mariadb19/plugin
       --user=mysql
-      --skip-log-error
       --pid-file=/run/mysqld/mysqld.pid
       --socket=/var/run/mysqld/mysqld.sock
       --bind-address=0.0.0.0
@@ -150,6 +149,8 @@ services:
         max_attempts: 5
         window: 4s
     entrypoint: /usr/bin/mysqld_safe
+    env_file:
+      - ./.env
     expose:
       - "3306"
     healthcheck:
@@ -163,19 +164,25 @@ services:
     networks:
       - back_tier
     volumes:
-      - type: bind
-        source: /Users/mariomartinmoreno/data/db
-        target: /var/lib/mysql
-        bind:
-          create_host_path:
+      - db:/var/lib/mysql
 
 networks:
   front_tier:
   back_tier:
 
 volumes:
-  /Users/mariomartinmoreno/data/db:
-  /Users/mariomartinmoreno/data/wordpress:
+  db:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: "${DATA_DIRECTORY:?data directory missing in .env}/db"
+  wordpress:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: "${DATA_DIRECTORY:?data directory missing in .env}/wordpress"
 
 configs:
   nginx_config:
