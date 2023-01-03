@@ -45,7 +45,7 @@ services:
     ports:
       - target: 443
         published: "${NGINX_PORT:?nginx external port is missing in .env}"
-        host_ip: 127.0.0.1
+        host_ip: 0.0.0.0
         protocol: tcp
         mode: host
     secrets:
