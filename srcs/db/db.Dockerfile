@@ -22,8 +22,6 @@ RUN service mysql start && mysql -e "DELETE FROM mysql.user WHERE User='';"
 RUN service mysql start && mysql -e "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');"
 RUN service mysql start && mysql -e "DROP DATABASE IF EXISTS test;"
 RUN service mysql start && mysql -e "DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';"
-RUN service mysql start && mysql -e "UPDATE mysql.user SET plugin='' WHERE user='root' AND host='localhost';"
-RUN service mysql start && mysql -e "FLUSH PRIVILEGES;"
 
 # Manual setup of user
 # --- Important: the hostname DNS will be wordpress.srcs_back_tier
@@ -34,3 +32,6 @@ RUN service mysql start && mysql -e "CREATE USER IF NOT EXISTS '$DB_WORDPRESS_US
 RUN service mysql start && mysql -e "FLUSH PRIVILEGES;"
 RUN service mysql start && mysql -e "GRANT ALL PRIVILEGES ON $DB_WORDPRESS_NAME.* TO $DB_WORDPRESS_USER@\"wordpress.srcs_back_tier\";"
 RUN service mysql start && mysql -e "FLUSH PRIVILEGES;"
+
+# Final remove of local access without password
+RUN service mysql start && mysql -e "UPDATE mysql.user SET plugin='' WHERE user='root' AND host='localhost'; FLUSH PRIVILEGES;"
