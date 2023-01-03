@@ -1,3 +1,4 @@
 FROM debian:buster-20220822
 
-RUN apt update; apt install -y nginx
+RUN ["/usr/bin/apt", "update"]
+RUN ["/usr/bin/apt", "install", "-y", "nginx", "netcat"]
